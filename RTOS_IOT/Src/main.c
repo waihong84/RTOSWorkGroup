@@ -44,6 +44,7 @@
 #include "main.h"
 #include "stm32l0xx_hal.h"
 #include "cmsis_os.h"
+#include "HTS221.h"
 
 /* USER CODE BEGIN Includes */
 
@@ -86,13 +87,15 @@ typedef enum{
 
 
 typedef struct{
-	uint16_t temperature;
-	uint16_t humidity;
+	double temperature;
+	double humidity;
 //	uint8_t * ptr_sent_Success;
 }QMessageData_USART;
 
 typedef struct{
 	EventId_NVM_Check EventId;
+	double temperature;
+	double humidity;
 	uint8_t dataArray[4];
 	uint8_t* ptr_sent_Success;
 }QMessageData_ForNVM;
@@ -147,8 +150,8 @@ int main(void)
   MX_I2C1_Init();
 
   /* USER CODE BEGIN 2 */
-//  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-//  HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFE);
+  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+  HAL_PWR_EnterSLEEPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFE);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -526,24 +529,13 @@ void func_UartPrint (void const* argument){
 
 void func_SensorRead (void const* argument){
 	QMessageData_ForNVM data;
-	uint8_t I2C_Buffer[5];
-//	= {0b10000111,0b00000000,0b00000000,}
-
-	HAL_I2C_Mem_Write(&hi2c1,0xBE,0x20,I2C_MEMADD_SIZE_8BIT,I2C_Buffer,3,100);
+	HTS221_Init(&hi2c1);
 	for(;;)
 	{
-		HAL_I2C_Mem_Read(&hi2c1,0xBE,0x0F,I2C_MEMADD_SIZE_8BIT,&I2C_Buffer[0],1,100);
-		HAL_I2C_Mem_Read(&hi2c1,0xBE,0x27,I2C_MEMADD_SIZE_8BIT,&I2C_Buffer[1],1,100);
-		HAL_I2C_Mem_Read(&hi2c1,0xBE,0x28,I2C_MEMADD_SIZE_8BIT,&I2C_Buffer[3],4,100);
-
 		data.EventId = EV_ReadsFromTempSensor;
-		data.dataArray[0] = I2C_Buffer[0];
-		data.dataArray[1] = I2C_Buffer[1];
-		data.dataArray[2] = I2C_Buffer[2];
-		data.dataArray[4] = I2C_Buffer[3];
-
+		data.temperature = HTS221_GetTemperature();
+		data.humidity = HTS221_GetHumidity();
 		xQueueSend(Queue_SendTo_TaskNVM,&data,100);
-
 		osDelay(1000);
 	}
 }
