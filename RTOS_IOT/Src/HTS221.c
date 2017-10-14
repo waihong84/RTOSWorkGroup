@@ -52,7 +52,7 @@ bool HTS221_Init (I2C_HandleTypeDef * hi2c)
 	if (HTS221_CheckAvailable()){
 		HTS221_EnableDevice();
 		HTS221_GetCoefficient();
-		HTS221_ConfigDevice(HTS221_DEFAULTSETTING);
+		HTS221_ConfigDevice(HTS221_DEFAULTSETTING, HTS221_DEFAULTREG1, HTS221_DEFAULTREG2);
 		return (true);
 	}
 	else{
@@ -93,11 +93,13 @@ static void HTS221_EnableDevice (void){
 	HAL_I2C_Mem_Write(HTS221_I2CHander,HTS221_DevAddr,HTS221_CTRL_REG1,I2C_MEMADD_SIZE_8BIT,&dat,1,10);
 }
 
-void HTS221_ConfigDevice (uint8_t Config){
-	uint8_t data = 0;
+void HTS221_ConfigDevice (uint8_t Config, uint8_t REGS1, uint8_t REGS2){
+//	  uint8_t data = Config;
 //	  data |= HTS221_AVGH_32;
 //	  data |= HTS221_AVGT_16;
-	  HTS221_I2C_Write(HTS221_AV_CONF,&data,sizeof(data));
+	  HTS221_I2C_Write(HTS221_CTRL_REG1,&REGS1,sizeof(REGS1));
+	  HTS221_I2C_Write(HTS221_CTRL_REG2,&REGS2,sizeof(REGS2));
+	  HTS221_I2C_Write(HTS221_AV_CONF,&Config,sizeof(Config));
 }
 
 

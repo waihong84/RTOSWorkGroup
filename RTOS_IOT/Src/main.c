@@ -79,6 +79,28 @@ osMessageQId Queue_SendTo_Uart;
 
 QueueSetHandle_t NVM_QueueSet;
 
+struct StructDate{
+	uint8_t Weekday;
+	uint8_t Month;
+	uint8_t Date;
+	uint8_t Year;
+};
+
+struct StructTime{
+	uint8_t Hours;
+	uint8_t Minutes;
+	uint8_t Secounds;
+	uint8_t TimeFormat;
+};
+
+struct StrucDataPacket{
+	double temperature;
+	double humidity;
+	struct StructDate Acqdate;
+	struct StructTime Acqtime;
+};
+
+
 typedef enum{
 	EV_ReadsFromTempSensor,
 	EV_ReturnFromUartSend,
@@ -87,18 +109,17 @@ typedef enum{
 
 
 typedef struct{
-	double temperature;
-	double humidity;
+	struct StrucDataPacket dataset[5];
 //	uint8_t * ptr_sent_Success;
 }QMessageData_USART;
 
 typedef struct{
 	EventId_NVM_Check EventId;
-	double temperature;
-	double humidity;
+	struct StrucDataPacket TempnHumidity;
 	uint8_t dataArray[4];
 	uint8_t* ptr_sent_Success;
 }QMessageData_ForNVM;
+
 
 /* USER CODE END PV */
 
@@ -148,6 +169,10 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART1_IRDA_Init();
   MX_I2C1_Init();
+
+  /*Set Date & Time for RTC*/
+//  HAL_RTC_SetDate();
+//  HAL_RTC_SetTime();
 
   /* USER CODE BEGIN 2 */
   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
@@ -454,7 +479,7 @@ static void MX_GPIO_Init(void)
 void func_NVM_Manager(void const* argument){
 	QMessageData_ForNVM Rawdata;
 	QMessageData_USART Uartdata;
-	uint8_t Uart_Updatecounter=0;
+	uint8_t Uart_Updatecounter = 0;
 	for(;;){
 //			TODO: Copy data from Queue then write into the EEPROM.
 		xQueueReceive(Queue_SendTo_TaskNVM,&Rawdata,portMAX_DELAY);
@@ -465,12 +490,13 @@ void func_NVM_Manager(void const* argument){
 			case EV_ReadsFromTempSensor:
 //			TODO: Receive the data from Temperature Sensor, then Save it into the NVM
 //				write to EEPROM; start Counter
-				if (Uart_Updatecounter>5){
+				if (Uart_Updatecounter >= 5){
 					xQueueSend(Queue_SendTo_Uart,&Uartdata,100);
 					Uart_Updatecounter = 0;
 				}
 				else {
 //					Need to write into EEPROM then increment Uart_Updatecounter
+					Uartdata.dataset[Uart_Updatecounter]=Rawdata.TempnHumidity;
 					Uart_Updatecounter++;
 				}
 				break;
@@ -516,12 +542,46 @@ void func_LEDBlink (void const* argument){
 void func_UartPrint (void const* argument){
 	QMessageData_ForNVM sendReturn;
 	QMessageData_USART receiveData;
+	HAL_StatusTypeDef Status = 0;
+	uint8_t itr = 0;
+	char tempText[5] = "";
+	char OutputText[80]="";
+
+
 	for(;;)
 	{
 		xQueueReceive(Queue_SendTo_Uart,&receiveData,portMAX_DELAY);
-		HAL_UART_Transmit(&huart2,(uint8_t *)"Next Game",10,200);
+		for(itr=0; itr< 5; itr++){
+
+			strcpy(OutputText,"Current Temperature is ");
+			itoa(receiveData.dataset[itr].temperature,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText, " Celsius '\n");
+
+			strcat(OutputText, "Humidity is ");
+			itoa(receiveData.dataset[itr].humidity,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText, " %rh '\n");
+
+			strcat(OutputText, " @ Time ");
+
+			itoa(receiveData.dataset[itr].Acqtime.Hours,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText,":");
+			itoa(receiveData.dataset[itr].Acqtime.Minutes,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText,":");
+			itoa(receiveData.dataset[itr].Acqtime.Secounds,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText, "'\n '\n");
+
+			Status += HAL_UART_Transmit(&huart2,(uint8_t *)OutputText,sizeof(OutputText),200);
+		}
+		//		HAL_UART_Transmit(&huart2,(uint8_t *)"testing",10,200);
 		sendReturn.EventId = EV_ReturnFromUartSend;
-		sendReturn.dataArray[0]=0x00;
+		if (Status == HAL_OK) sendReturn.dataArray[0]=0x01;
+		else sendReturn.dataArray[0]=0x00;
+		Status = 0;
 		xQueueSend(Queue_SendTo_TaskNVM,&sendReturn,100);
 	}
 }
@@ -530,12 +590,21 @@ void func_UartPrint (void const* argument){
 void func_SensorRead (void const* argument){
 	QMessageData_ForNVM data;
 	HTS221_Init(&hi2c1);
+	RTC_TimeTypeDef Time;
 	for(;;)
 	{
 		data.EventId = EV_ReadsFromTempSensor;
-		data.temperature = HTS221_GetTemperature();
-		data.humidity = HTS221_GetHumidity();
+		data.TempnHumidity.temperature = HTS221_GetTemperature();
+		data.TempnHumidity.humidity = HTS221_GetHumidity();
+		HAL_RTC_GetDate(&hrtc,(RTC_DateTypeDef *)(&data.TempnHumidity.Acqdate.Weekday),RTC_FORMAT_BIN);
+		HAL_RTC_GetTime(&hrtc,&Time,RTC_FORMAT_BIN );
+		data.TempnHumidity.Acqtime.Hours = Time.Hours;
+		data.TempnHumidity.Acqtime.Minutes = Time.Minutes;
+		data.TempnHumidity.Acqtime.Secounds= Time.Seconds;
+		data.TempnHumidity.Acqtime.TimeFormat= Time.TimeFormat;
+
 		xQueueSend(Queue_SendTo_TaskNVM,&data,100);
+		//TODO: Need to comment the osDelay(1000) after implementation of autowakeup function event
 		osDelay(1000);
 	}
 }

@@ -52,6 +52,8 @@
 //#include "stm32l0xx_hal_gpio.h"
 //#include "stm32l0xx_hal_i2c.h"
 //#include "stm32l0xx_hal_uart.h"
+#include <string.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/

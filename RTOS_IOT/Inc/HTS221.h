@@ -15,12 +15,13 @@
 
 
 
-#define HTS221_DevAddr	0xBE
+#define HTS221_DevAddr		 0xBE
 
 #define HTS221_SLAVE_ADDRESS 0x5F 		///< I2C Slave Address
 #define HTS221_DEVICE_ID 0xBC 			///< Who am i device identifier
-#define HTS221_DEFAULTSETTING	(HTS221_AVGH_32|HTS221_AVGT_16)
-
+#define HTS221_DEFAULTSETTING			(uint8_t)(HTS221_AVGH_32|HTS221_AVGT_16)
+#define HTS221_DEFAULTREG1				(uint8_t)(HTS221_PD|HTS221_BDU|HTS221_ODR_125HZ)
+#define HTS221_DEFAULTREG2				(uint8_t)(0)
 
 //
 /// @name AV_CONF:AVGH
@@ -79,33 +80,33 @@
 
 /// @name Register Addresses
 /// @{
-#define HTS221_WHO_AM_I 0x0F
-#define HTS221_AV_CONF 0x10
-#define HTS221_CTRL_REG1 0x20
-#define HTS221_CTRL_REG2 0x21
-#define HTS221_CTRL_REG3 0x22
-#define HTS221_STATUS_REG 0x27
-#define HTS221_HUMIDITY_OUT_L 0x28
-#define HTS221_HUMIDITY_OUT_H 0x29
-#define HTS221_TEMP_OUT_L 0x2A
-#define HTS221_TEMP_OUT_H 0x2B
-#define HTS221_H0_RH_X2 0x30
-#define HTS221_H1_RH_X2 0x31
-#define HTS221_T0_DEGC_X8 0x32
-#define HTS221_T1_DEGC_X8 0x33
-#define HTS221_T1_T0_MSB 0x35
-#define HTS221_H0_T0_OUT_L 0x36
-#define HTS221_H0_T0_OUT_H 0x37
-#define HTS221_H1_T0_OUT_L 0x3A
-#define HTS221_H1_T0_OUT_H 0x3B
-#define HTS221_T0_OUT_L 0x3C
-#define HTS221_T0_OUT_H 0x3D
-#define HTS221_T1_OUT_L 0x3E
-#define HTS221_T1_OUT_H 0x3F
+#define HTS221_WHO_AM_I 				0x0F
+#define HTS221_AV_CONF 					0x10
+#define HTS221_CTRL_REG1 				0x20
+#define HTS221_CTRL_REG2 				0x21
+#define HTS221_CTRL_REG3 				0x22
+#define HTS221_STATUS_REG 				0x27
+#define HTS221_HUMIDITY_OUT_L 			0x28
+#define HTS221_HUMIDITY_OUT_H 			0x29
+#define HTS221_TEMP_OUT_L 				0x2A
+#define HTS221_TEMP_OUT_H 				0x2B
+#define HTS221_H0_RH_X2 				0x30
+#define HTS221_H1_RH_X2 				0x31
+#define HTS221_T0_DEGC_X8 				0x32
+#define HTS221_T1_DEGC_X8 				0x33
+#define HTS221_T1_T0_MSB 				0x35
+#define HTS221_H0_T0_OUT_L 				0x36
+#define HTS221_H0_T0_OUT_H 				0x37
+#define HTS221_H1_T0_OUT_L 				0x3A
+#define HTS221_H1_T0_OUT_H 				0x3B
+#define HTS221_T0_OUT_L 				0x3C
+#define HTS221_T0_OUT_H 				0x3D
+#define HTS221_T1_OUT_L 				0x3E
+#define HTS221_T1_OUT_H 				0x3F
 /// @}
 
 bool HTS221_Init (I2C_HandleTypeDef * hi2c);
-void HTS221_ConfigDevice (uint8_t Config);
+void HTS221_ConfigDevice (uint8_t Config, uint8_t REGS1, uint8_t REGS2);
 double HTS221_GetTemperature (void);
 double HTS221_GetHumidity (void);
 
@@ -113,29 +114,3 @@ double HTS221_GetHumidity (void);
 
 
 
-//
-///**
-// @class FaBoHumidity_HTS221
-// @brief FaBo Humidity I2C Controll class
-//*/
-//class FaBoHumidity_HTS221 {
-//  public:
-//    FaBoHumidity_HTS221(uint8_t addr = HTS221_SLAVE_ADDRESS);
-//    bool begin(void);
-//    bool checkDevice(void);
-//    void powerOn(void);
-//    void configDevice(void);
-//    void readCoef(void);
-//    double getHumidity(void);
-//    double getTemperature(void);
-//  private:
-//    uint8_t _i2caddr;
-//    uint8_t _H0_rH_x2, _H1_rH_x2;
-//    uint16_t _T0_degC_x8, _T1_degC_x8;
-//    int16_t _H0_T0_OUT, _H1_T0_OUT;
-//    int16_t _T0_OUT, _T1_OUT;
-//    uint8_t readI2c(uint8_t registerAddr);
-//    void writeI2c(uint8_t registerAddr, uint8_t data);
-//};
-//
-//#endif // FABOHUMIDITY_HTS221_H
