@@ -50,6 +50,7 @@
 #define USING_EEPROM
 //#define CodeTesting
 #define EEPROM_START_ADDRESS				(uint32_t *)0x08080000
+#define NUMBER_OF_SAMPLING					(uint8_t)0x5
 
 /* USER CODE END Includes */
 
@@ -98,9 +99,19 @@ union uTime{
 	struct {
 		uint8_t Hours;
 		uint8_t Minutes;
-		uint8_t Secounds;
+		uint8_t Seconds;
 		uint8_t TimeFormat;
 	}uStructTime;
+};
+
+union uDataPacket{
+	uint32_t datPacket[4];
+	struct {
+		float temperature;
+		float humidity;
+		union uDate Date;
+		union uTime Time;
+	}uStructDataPacket;
 };
 
 struct StructDate{
@@ -115,16 +126,6 @@ struct StructTime{
 	uint8_t Minutes;
 	uint8_t Secounds;
 	uint8_t TimeFormat;
-};
-
-union uDataPacket{
-	uint32_t datPacket[4];
-	struct {
-		float temperature;
-		float humidity;
-		union uDate Date;
-		union uTime Time;
-	}uStructDataPacket;
 };
 
 struct StrucDataPacket{
@@ -142,12 +143,14 @@ typedef enum{
 
 
 typedef struct{
-	struct StrucDataPacket dataset[5];
+//	struct StrucDataPacket dataset[5];
+	union uDataPacket udataset[5];
 }QMessageData_USART;
 
 typedef struct{
 	EventId_NVM_Check EventId;
-	struct StrucDataPacket TempnHumidity;
+//	struct StrucDataPacket TempnHumidity;
+	union uDataPacket uTempnHumidity;
 	uint8_t dataArray[4];
 	uint8_t* ptr_sent_Success;
 }QMessageData_ForNVM;
@@ -515,8 +518,17 @@ void func_NVM_Manager(void const* argument){
 	QMessageData_ForNVM Rawdata;
 	QMessageData_USART Uartdata;
 	volatile uint32_t*  Ptr_address=0;
-	uint8_t itr;
+	uint8_t itr, itrx;
 	uint8_t Uart_Updatecounter = 0;
+
+	Ptr_address = EEPROM_START_ADDRESS;
+	HAL_FLASHEx_DATAEEPROM_Unlock();
+	for(itr=0; itr<50; itr++){
+		HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)Ptr_address);
+		Ptr_address++;
+	}
+	HAL_FLASHEx_DATAEEPROM_Lock();
+
 	for(;;){
 //			TODO: Copy data from Queue then write into the EEPROM.
 		xQueueReceive(Queue_SendTo_TaskNVM,&Rawdata,portMAX_DELAY);
@@ -527,16 +539,14 @@ void func_NVM_Manager(void const* argument){
 			case EV_ReadsFromTempSensor:
 //			TODO: Receive the data from Temperature Sensor, then Save it into the NVM
 //				write to EEPROM; start Counter
-				if (Uart_Updatecounter >= 5){
+				if (Uart_Updatecounter >= NUMBER_OF_SAMPLING){
 					#ifdef USING_EEPROM
 					Ptr_address = EEPROM_START_ADDRESS;
-					for (itr=0; itr <5; itr++){
-//						Uartdata.dataset[itr] = (QMessageData_USART)(*Ptr_address);
-//						Ptr_address +=(sizeof(QMessageData_USART)/sizeof(Ptr_address));
-						Uartdata.dataset[itr].temperature = (double)(*Ptr_address);
-						Ptr_address++;
-						Uartdata.dataset[itr].humidity = (double)(*Ptr_address);
-						Ptr_address++;
+					for (itr=0; itr < NUMBER_OF_SAMPLING; itr++){
+						for (itrx=0; itrx < 4; itrx++ ){
+							Uartdata.udataset[itr].datPacket[itrx] = *Ptr_address;
+							Ptr_address++;
+						}
 					}
 					xQueueSend(Queue_SendTo_Uart,&Uartdata,100);
 					Uart_Updatecounter = 0;
@@ -551,14 +561,10 @@ void func_NVM_Manager(void const* argument){
 					#ifdef USING_EEPROM
 					if (Uart_Updatecounter == 0) Ptr_address = EEPROM_START_ADDRESS;
 					HAL_FLASHEx_DATAEEPROM_Unlock();
-					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, Rawdata.TempnHumidity.temperature);
-					Ptr_address++;
-					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, Rawdata.TempnHumidity.humidity);
-					Ptr_address++;
-//					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, (uint32_t)Rawdata.TempnHumidity.Acqdate);
-//					Ptr_address++;
-//					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, (uint32_t)Rawdata.TempnHumidity.Acqtime);
-//					Ptr_address++;
+					for (itr=0; itr < sizeof(Rawdata.uTempnHumidity)/sizeof(Rawdata.uTempnHumidity.datPacket[0]) ;itr++){
+					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, Rawdata.uTempnHumidity.datPacket[itr]);
+					Ptr_address+=(sizeof(Rawdata.uTempnHumidity.datPacket[itr])/sizeof(Ptr_address));
+					}
 					HAL_FLASHEx_DATAEEPROM_Lock();
 					Uart_Updatecounter++;
 					#else
@@ -572,7 +578,6 @@ void func_NVM_Manager(void const* argument){
 //			TODO: After confirm receive successful (0x01),
 //				delete data in NVM.
 //				else resend the data in NVM to UART.
-
 				if (Rawdata.dataArray[0]==0x01){
 					#ifdef USING_EEPROM
 					Ptr_address = EEPROM_START_ADDRESS;
@@ -626,12 +631,10 @@ void func_UartPrint (void const* argument){
 	uint8_t itr = 0;
 	char tempText[5] = "";
 	char OutputText[90]="";
-
-
 	for(;;)
 	{
 		xQueueReceive(Queue_SendTo_Uart,&receiveData,portMAX_DELAY);
-		for(itr=0; itr< 5; itr++){
+		for(itr=0; itr< NUMBER_OF_SAMPLING; itr++){
 
 			strcpy(OutputText,"Thread counter: ");
 			itoa(thread1_counter,tempText,10);
@@ -639,24 +642,24 @@ void func_UartPrint (void const* argument){
 			strcat(OutputText,"\n");
 
 			strcat(OutputText,"Current Temperature is ");
-			itoa(receiveData.dataset[itr].temperature,tempText,10);
+			itoa(receiveData.udataset[itr].uStructDataPacket.temperature,tempText,10);
 			strcat(OutputText,tempText);
 			strcat(OutputText, " Celsius\n");
 
 			strcat(OutputText, "Humidity is ");
-			itoa(receiveData.dataset[itr].humidity,tempText,10);
+			itoa(receiveData.udataset[itr].uStructDataPacket.humidity,tempText,10);
 			strcat(OutputText,tempText);
 			strcat(OutputText, " %rh\n");
 
 			strcat(OutputText, " @ Time ");
 
-			itoa(receiveData.dataset[itr].Acqtime.Hours,tempText,10);
+			itoa(receiveData.udataset[itr].uStructDataPacket.Time.uStructTime.Hours,tempText,10);
 			strcat(OutputText,tempText);
 			strcat(OutputText,":");
-			itoa(receiveData.dataset[itr].Acqtime.Minutes,tempText,10);
+			itoa(receiveData.udataset[itr].uStructDataPacket.Time.uStructTime.Minutes,tempText,10);
 			strcat(OutputText,tempText);
 			strcat(OutputText,":");
-			itoa(receiveData.dataset[itr].Acqtime.Secounds,tempText,10);
+			itoa(receiveData.udataset[itr].uStructDataPacket.Time.uStructTime.Seconds,tempText,10);
 			strcat(OutputText,tempText);
 			strcat(OutputText, "\n \n");
 
@@ -683,15 +686,15 @@ void func_SensorRead (void const* argument){
 //		TODO: Need to verify the integrity of readout values from sensor
 		data.EventId = EV_ReadsFromTempSensor;
 //		osThreadSetPriority(Task_SensorRead,osPriorityAboveNormal);
-		data.TempnHumidity.temperature = HTS221_GetTemperature();
-		data.TempnHumidity.humidity = HTS221_GetHumidity();
+		data.uTempnHumidity.uStructDataPacket.temperature = (float)HTS221_GetTemperature();
+		data.uTempnHumidity.uStructDataPacket.humidity = (float)HTS221_GetHumidity();
 //		osThreadSetPriority(Task_SensorRead,osPriorityNormal);
-		HAL_RTC_GetDate(&hrtc,(RTC_DateTypeDef *)(&data.TempnHumidity.Acqdate.Weekday),RTC_FORMAT_BIN);
+		HAL_RTC_GetDate(&hrtc,(RTC_DateTypeDef *)(&data.uTempnHumidity.uStructDataPacket.Date.uStructDate.Weekday),RTC_FORMAT_BIN);
 		HAL_RTC_GetTime(&hrtc,&Time,RTC_FORMAT_BIN );
-		data.TempnHumidity.Acqtime.Hours = Time.Hours;
-		data.TempnHumidity.Acqtime.Minutes = Time.Minutes;
-		data.TempnHumidity.Acqtime.Secounds= Time.Seconds;
-		data.TempnHumidity.Acqtime.TimeFormat= Time.TimeFormat;
+		data.uTempnHumidity.uStructDataPacket.Time.uStructTime.Hours = Time.Hours;
+		data.uTempnHumidity.uStructDataPacket.Time.uStructTime.Minutes = Time.Minutes;
+		data.uTempnHumidity.uStructDataPacket.Time.uStructTime.Seconds= Time.Seconds;
+		data.uTempnHumidity.uStructDataPacket.Time.uStructTime.TimeFormat= Time.TimeFormat;
 
 		xQueueSend(Queue_SendTo_TaskNVM,&data,100);
 		//TODO: Need to comment the osDelay(1000) after implementation of autowakeup function event
