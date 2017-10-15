@@ -1344,6 +1344,7 @@ void HAL_RTCEx_WakeUpTimerIRQHandler(RTC_HandleTypeDef *hrtc)
 
   /* Clear the EXTI's line Flag for RTC WakeUpTimer */
   __HAL_RTC_WAKEUPTIMER_EXTI_CLEAR_FLAG();
+
   
   /* Change RTC state */
   hrtc->State = HAL_RTC_STATE_READY;

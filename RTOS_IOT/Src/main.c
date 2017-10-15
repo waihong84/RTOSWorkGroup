@@ -66,6 +66,7 @@ UART_HandleTypeDef huart2;
 /* Private variables ---------------------------------------------------------*/
 uint32_t thread1_counter;
 uint32_t Queue_number;
+uint8_t updateCounter = 0;
 
 osThreadId Task_NVM_ReadWrite;
 osThreadId Task_UartSend;
@@ -170,13 +171,19 @@ int main(void)
   MX_USART1_IRDA_Init();
   MX_I2C1_Init();
 
-  /*Set Date & Time for RTC*/
-//  HAL_RTC_SetDate();
-//  HAL_RTC_SetTime();
 
   /* USER CODE BEGIN 2 */
-  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-  HAL_PWR_EnterSLEEPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFE);
+
+  /* Configure Event AutoWakeup */
+// TODO: Need to configure the Period of auto wakeup currently is every 30 seconds
+  HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 30, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+  NVIC_EnableIRQ(RTC_IRQn);
+  NVIC_SetPriority(RTC_IRQn,0);
+
+  /*Set Date & Time for RTC*/
+  //  HAL_RTC_SetDate();
+  //  HAL_RTC_SetTime();
+
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -202,10 +209,10 @@ int main(void)
   osThreadDef(HeartBeat, func_LEDBlink, osPriorityNormal, 0 , 64);
   Task_HearBeatLED = osThreadCreate(osThread(HeartBeat),NULL);
 
-  osThreadDef(HTS221_sensor, func_SensorRead, osPriorityNormal, 0, 64);
+  osThreadDef(HTS221_sensor, func_SensorRead, osPriorityNormal, 0, 96);
   Task_SensorRead = osThreadCreate(osThread(HTS221_sensor),NULL);
 
-  osThreadDef(NVM, func_NVM_Manager, osPriorityAboveNormal, 0 ,128);
+  osThreadDef(NVM, func_NVM_Manager, osPriorityAboveNormal, 0 ,96);
   Task_NVM_ReadWrite = osThreadCreate(osThread(NVM),NULL);
 
   osThreadDef(UartPrint, func_UartPrint, osPriorityAboveNormal, 0 , 128);
@@ -215,8 +222,6 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-
-
 
 //  osMessageQDef(NVM_Manager,1,QMessageData_ForNVM);
 //  osMessageQDef(NVM_Manager,1,uint8_t);
@@ -228,13 +233,12 @@ int main(void)
 
   Queue_SendTo_TaskNVM = xQueueCreate(1,sizeof(QMessageData_ForNVM));
   Queue_SendTo_Uart = xQueueCreate(1,sizeof(QMessageData_USART));
-//
+
 //  xQueueCreateSet(1*sizeof(QMessageData_ForNVM)+1*sizeof(QMessageData_Sensor));
 //  xQueueAddToSet(Queue_SendTo_TaskNVM,NVM_QueueSet);
 
   /* USER CODE END RTOS_QUEUES */
  
-
   /* Start scheduler */
   osKernelStart();
   
@@ -313,7 +317,7 @@ void SystemClock_Config(void)
   HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
 
   /* SysTick_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(SysTick_IRQn, 3, 0);
+  HAL_NVIC_SetPriority(SysTick_IRQn, 2, 0);
 }
 
 /* I2C1 init function */
@@ -505,8 +509,14 @@ void func_NVM_Manager(void const* argument){
 //			TODO: After confirm receive successful (0x01),
 //				delete data in NVM.
 //				else resend the data in NVM to UART.
-				if (Rawdata.dataArray[0]==0x00){
 
+				if (Rawdata.dataArray[0]==0x01){
+					Rawdata.dataArray[1]=0x01;
+					/*Config Low Power SleepMode*/
+					HAL_SuspendTick();
+					__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+					HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON,PWR_SLEEPENTRY_WFI);
+					HAL_ResumeTick();
 				}
 				else {
 
@@ -523,18 +533,12 @@ void func_NVM_Manager(void const* argument){
 void func_LEDBlink (void const* argument){
 	uint32_t xLastTickWakeup = osKernelSysTick();
 	thread1_counter = 0;
-//	uint8_t TestSentPtr = 0;
-//	QMessageData_ForNVM toNVM;
-//	toNVM.ptr_sent_Success = &TestSentPtr;
 	for(;;)
 	{
 		thread1_counter++;
 		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+//		osDelay(1000);
 		osDelayUntil(&xLastTickWakeup,1000);
-//		toNVM.EventId = EV_ReturnFromBlinkLED;
-//		toNVM.dataArray[0]=0xBC;
-//		*toNVM.ptr_sent_Success = 0x04;
-//		xQueueSend(Queue_SendTo_TaskNVM,&toNVM,100);
 	}
 }
 
@@ -545,7 +549,7 @@ void func_UartPrint (void const* argument){
 	HAL_StatusTypeDef Status = 0;
 	uint8_t itr = 0;
 	char tempText[5] = "";
-	char OutputText[80]="";
+	char OutputText[90]="";
 
 
 	for(;;)
@@ -553,15 +557,20 @@ void func_UartPrint (void const* argument){
 		xQueueReceive(Queue_SendTo_Uart,&receiveData,portMAX_DELAY);
 		for(itr=0; itr< 5; itr++){
 
-			strcpy(OutputText,"Current Temperature is ");
+			strcpy(OutputText,"Thread counter: ");
+			itoa(thread1_counter,tempText,10);
+			strcat(OutputText,tempText);
+			strcat(OutputText,"\n");
+
+			strcat(OutputText,"Current Temperature is ");
 			itoa(receiveData.dataset[itr].temperature,tempText,10);
 			strcat(OutputText,tempText);
-			strcat(OutputText, " Celsius '\n");
+			strcat(OutputText, " Celsius\n");
 
 			strcat(OutputText, "Humidity is ");
 			itoa(receiveData.dataset[itr].humidity,tempText,10);
 			strcat(OutputText,tempText);
-			strcat(OutputText, " %rh '\n");
+			strcat(OutputText, " %rh\n");
 
 			strcat(OutputText, " @ Time ");
 
@@ -573,7 +582,7 @@ void func_UartPrint (void const* argument){
 			strcat(OutputText,":");
 			itoa(receiveData.dataset[itr].Acqtime.Secounds,tempText,10);
 			strcat(OutputText,tempText);
-			strcat(OutputText, "'\n '\n");
+			strcat(OutputText, "\n \n");
 
 			Status += HAL_UART_Transmit(&huart2,(uint8_t *)OutputText,sizeof(OutputText),200);
 		}
@@ -588,14 +597,19 @@ void func_UartPrint (void const* argument){
 
 
 void func_SensorRead (void const* argument){
+	uint32_t xLastTickWakeup = osKernelSysTick();
+	updateCounter = 0;
 	QMessageData_ForNVM data;
 	HTS221_Init(&hi2c1);
 	RTC_TimeTypeDef Time;
 	for(;;)
 	{
+//		TODO: Need to verify the integrity of readout values from sensor
 		data.EventId = EV_ReadsFromTempSensor;
+//		osThreadSetPriority(Task_SensorRead,osPriorityAboveNormal);
 		data.TempnHumidity.temperature = HTS221_GetTemperature();
 		data.TempnHumidity.humidity = HTS221_GetHumidity();
+//		osThreadSetPriority(Task_SensorRead,osPriorityNormal);
 		HAL_RTC_GetDate(&hrtc,(RTC_DateTypeDef *)(&data.TempnHumidity.Acqdate.Weekday),RTC_FORMAT_BIN);
 		HAL_RTC_GetTime(&hrtc,&Time,RTC_FORMAT_BIN );
 		data.TempnHumidity.Acqtime.Hours = Time.Hours;
@@ -605,7 +619,8 @@ void func_SensorRead (void const* argument){
 
 		xQueueSend(Queue_SendTo_TaskNVM,&data,100);
 		//TODO: Need to comment the osDelay(1000) after implementation of autowakeup function event
-		osDelay(1000);
+//			osDelay(1000);
+			osDelayUntil(&xLastTickWakeup,1000);
 	}
 }
 

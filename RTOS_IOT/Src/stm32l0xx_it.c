@@ -36,8 +36,10 @@
 #include "stm32l0xx_it.h"
 #include "cmsis_os.h"
 
-/* USER CODE BEGIN 0 */
 
+/* USER CODE BEGIN 0 */
+extern RTC_HandleTypeDef hrtc;
+extern UART_HandleTypeDef huart2;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -70,7 +72,8 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 void RTC_IRQHandler (void){
-
+	HAL_RTCEx_WakeUpTimerIRQHandler(&hrtc);
+	HAL_UART_Transmit(&huart2,(uint8_t*)"RTC IRQ \n",9,10);
 }
 /* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
