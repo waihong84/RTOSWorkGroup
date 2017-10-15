@@ -47,6 +47,9 @@
 #include "HTS221.h"
 
 /* USER CODE BEGIN Includes */
+#define USING_EEPROM
+//#define CodeTesting
+#define EEPROM_START_ADDRESS				(uint32_t *)0x08080000
 
 /* USER CODE END Includes */
 
@@ -80,6 +83,26 @@ osMessageQId Queue_SendTo_Uart;
 
 QueueSetHandle_t NVM_QueueSet;
 
+union uDate{
+	uint32_t u32_date;
+	struct {
+	  uint8_t Weekday;
+	  uint8_t Month;
+	  uint8_t Date;
+	  uint8_t Year;
+	}uStructDate;
+};
+
+union uTime{
+	uint32_t u32_Time;
+	struct {
+		uint8_t Hours;
+		uint8_t Minutes;
+		uint8_t Secounds;
+		uint8_t TimeFormat;
+	}uStructTime;
+};
+
 struct StructDate{
 	uint8_t Weekday;
 	uint8_t Month;
@@ -94,13 +117,22 @@ struct StructTime{
 	uint8_t TimeFormat;
 };
 
+union uDataPacket{
+	uint32_t datPacket[4];
+	struct {
+		float temperature;
+		float humidity;
+		union uDate Date;
+		union uTime Time;
+	}uStructDataPacket;
+};
+
 struct StrucDataPacket{
 	double temperature;
 	double humidity;
 	struct StructDate Acqdate;
 	struct StructTime Acqtime;
 };
-
 
 typedef enum{
 	EV_ReadsFromTempSensor,
@@ -111,7 +143,6 @@ typedef enum{
 
 typedef struct{
 	struct StrucDataPacket dataset[5];
-//	uint8_t * ptr_sent_Success;
 }QMessageData_USART;
 
 typedef struct{
@@ -483,6 +514,8 @@ static void MX_GPIO_Init(void)
 void func_NVM_Manager(void const* argument){
 	QMessageData_ForNVM Rawdata;
 	QMessageData_USART Uartdata;
+	volatile uint32_t*  Ptr_address=0;
+	uint8_t itr;
 	uint8_t Uart_Updatecounter = 0;
 	for(;;){
 //			TODO: Copy data from Queue then write into the EEPROM.
@@ -495,13 +528,43 @@ void func_NVM_Manager(void const* argument){
 //			TODO: Receive the data from Temperature Sensor, then Save it into the NVM
 //				write to EEPROM; start Counter
 				if (Uart_Updatecounter >= 5){
+					#ifdef USING_EEPROM
+					Ptr_address = EEPROM_START_ADDRESS;
+					for (itr=0; itr <5; itr++){
+//						Uartdata.dataset[itr] = (QMessageData_USART)(*Ptr_address);
+//						Ptr_address +=(sizeof(QMessageData_USART)/sizeof(Ptr_address));
+						Uartdata.dataset[itr].temperature = (double)(*Ptr_address);
+						Ptr_address++;
+						Uartdata.dataset[itr].humidity = (double)(*Ptr_address);
+						Ptr_address++;
+					}
 					xQueueSend(Queue_SendTo_Uart,&Uartdata,100);
 					Uart_Updatecounter = 0;
+					#else
+					xQueueSend(Queue_SendTo_Uart,&Uartdata,100);
+					Uart_Updatecounter = 0;
+					#endif
 				}
+
 				else {
 //					Need to write into EEPROM then increment Uart_Updatecounter
+					#ifdef USING_EEPROM
+					if (Uart_Updatecounter == 0) Ptr_address = EEPROM_START_ADDRESS;
+					HAL_FLASHEx_DATAEEPROM_Unlock();
+					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, Rawdata.TempnHumidity.temperature);
+					Ptr_address++;
+					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, Rawdata.TempnHumidity.humidity);
+					Ptr_address++;
+//					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, (uint32_t)Rawdata.TempnHumidity.Acqdate);
+//					Ptr_address++;
+//					HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAMDATA_WORD, (uint32_t)Ptr_address, (uint32_t)Rawdata.TempnHumidity.Acqtime);
+//					Ptr_address++;
+					HAL_FLASHEx_DATAEEPROM_Lock();
+					Uart_Updatecounter++;
+					#else
 					Uartdata.dataset[Uart_Updatecounter]=Rawdata.TempnHumidity;
 					Uart_Updatecounter++;
+					#endif
 				}
 				break;
 
@@ -511,7 +574,20 @@ void func_NVM_Manager(void const* argument){
 //				else resend the data in NVM to UART.
 
 				if (Rawdata.dataArray[0]==0x01){
-					Rawdata.dataArray[1]=0x01;
+					#ifdef USING_EEPROM
+					Ptr_address = EEPROM_START_ADDRESS;
+					for(itr=0; itr<10; itr++){
+						HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)Ptr_address);
+						Ptr_address++;
+					}
+					#endif
+					#ifdef CodeTesting
+					Ptr_address = EEPROM_START_ADDRESS;
+					for(itr=0;itr<5;itr++){
+						Uartdata.dataset[itr].temperature= (double)(*Ptr_address);
+						Ptr_address++;
+					}
+					#endif
 					/*Config Low Power SleepMode*/
 					HAL_SuspendTick();
 					__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);

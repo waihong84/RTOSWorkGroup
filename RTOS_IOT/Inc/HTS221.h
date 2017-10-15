@@ -4,15 +4,12 @@
  *  Created on: Oct 14, 2017
  *      Author: pt
  */
+#ifndef HTS221_H_
+#define HTS221_H_
 
 #include <stdint.h>
 #include <stdbool.h>
 #include "stm32l0xx_hal.h"
-
-
-#ifndef HTS221_H_
-#define HTS221_H_
-
 
 
 #define HTS221_DevAddr		 0xBE
