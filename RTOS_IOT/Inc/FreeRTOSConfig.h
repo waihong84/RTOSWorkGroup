@@ -98,6 +98,7 @@
 #define configSUPPORT_DYNAMIC_ALLOCATION         1
 #define configUSE_IDLE_HOOK                      0
 #define configUSE_TICK_HOOK                      0
+#define configUSE_TICKLESS_IDLE                  2
 #define configCPU_CLOCK_HZ                       ( SystemCoreClock )
 #define configTICK_RATE_HZ                       ((TickType_t)1000)
 #define configMAX_PRIORITIES                     ( 7 )
@@ -164,7 +165,21 @@ standard names. */
               to prevent overwriting SysTick_Handler defined within STM32Cube HAL */
 /* #define xPortSysTickHandler SysTick_Handler */
 
-/* USER CODE BEGIN Defines */   	      
+/* USER CODE BEGIN Defines */
+  /* The configPRE_SLEEP_PROCESSING() and configPOST_SLEEP_PROCESSING() macros
+  allow the application writer to add additional code before and after the MCU is
+  placed into the low power state respectively.  The empty implementations
+  provided in this demo can be extended to save even more power. */
+#if configUSE_TICKLESS_IDLE == 2
+#if defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__)
+void vMainPreStopProcessing(void);
+void vMainPostStopProcessing(void);
+#endif /* defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__) */
+
+#define configPRE_STOP_PROCESSING       vMainPreStopProcessing
+#define configPOST_STOP_PROCESSING      vMainPostStopProcessing
+#endif /* configUSE_TICKLESS_IDLE == 2 */
+
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
 /* USER CODE END Defines */ 
 

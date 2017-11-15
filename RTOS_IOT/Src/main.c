@@ -594,10 +594,10 @@ void func_NVM_Manager(void const* argument){
 					}
 					#endif
 					/*Config Low Power SleepMode*/
-					HAL_SuspendTick();
-					__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-					HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON,PWR_SLEEPENTRY_WFI);
-					HAL_ResumeTick();
+//					HAL_SuspendTick();
+//					__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+//					HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON,PWR_SLEEPENTRY_WFI);
+//					HAL_ResumeTick();
 				}
 				else {
 
@@ -612,14 +612,14 @@ void func_NVM_Manager(void const* argument){
 
 
 void func_LEDBlink (void const* argument){
-	uint32_t xLastTickWakeup = osKernelSysTick();
+//	uint32_t xLastTickWakeup = osKernelSysTick();
 	thread1_counter = 0;
 	for(;;)
 	{
 		thread1_counter++;
 		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-//		osDelay(1000);
-		osDelayUntil(&xLastTickWakeup,1000);
+		osDelay(1000);
+//		osDelayUntil(&xLastTickWakeup,1000);
 	}
 }
 
@@ -676,7 +676,7 @@ void func_UartPrint (void const* argument){
 
 
 void func_SensorRead (void const* argument){
-	uint32_t xLastTickWakeup = osKernelSysTick();
+	//uint32_t xLastTickWakeup = osKernelSysTick();
 	updateCounter = 0;
 	QMessageData_ForNVM data;
 	HTS221_Init(&hi2c1);
@@ -698,8 +698,8 @@ void func_SensorRead (void const* argument){
 
 		xQueueSend(Queue_SendTo_TaskNVM,&data,100);
 		//TODO: Need to comment the osDelay(1000) after implementation of autowakeup function event
-//			osDelay(1000);
-			osDelayUntil(&xLastTickWakeup,1000);
+			osDelay(1000);
+//			osDelayUntil(&xLastTickWakeup,1000);
 	}
 }
 
@@ -707,6 +707,17 @@ void vApplicationTickHook (void){
 	for(;;){
 
 	}
+}
+
+void vMainPreStopProcessing(void)
+{
+  //GPIO_ConfigAN();
+}
+
+
+void vMainPostStopProcessing(void)
+{
+
 }
 
 
